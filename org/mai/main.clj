@@ -2,8 +2,10 @@
   (:require [clojure.java.io :as io])
   (:require [clojure.string :as str]))
 
+; Access modifiers that will not be included in the pattern matching.
 (def other-method-access-modifiers ["public", "protected"])
 
+; All types of REST endpoints.
 (def rest-endpoints ["@GetMapping",
                      "@PostMapping",
                      "@PutMapping",
@@ -11,40 +13,83 @@
                      "@RequestMapping",
                      "@PatchMapping"])
 
-(defn is-another-method-access-modifier? [line]
-  (not (nil? (some #(str/includes? line %) other-method-access-modifiers))))
+(defn is-another-method-access-modifier? [word]
+  "Returns true if the given word contains another method access
+   modifier other than private (such as public or protected), false otherwise."
+  [word]
+  (not (nil? (some #(str/includes? word %) other-method-access-modifiers))))
 
-(defn is-method-private? [line]
-  (str/includes? line "private"))
+(defn is-method-private?
+  "Returns true if the given word contains the 'private' access modifier
+   for a method, false otherwise."
+  [word]
+  (str/includes? word "private"))
 
-(defn code-before-multiline-comment [line]
+(defn code-before-multiline-comment
+  "Given a line of code containing a multiline comment, returns the code that
+   precedes the comment. If the comment is not found in the line, returns nil."
+  [line]
   (let [index (str/index-of line "/*" 1)]
     (when index
       (subs line 0 index))))
 
-(defn code-after-multiline-comment [line]
+(defn code-after-multiline-comment
+  "Given a line of code containing a multiline comment, returns the code that
+   follows the comment. If the comment is not found in the line or if it is the
+   last thing in the line, returns nil."
+  [line]
   (let [index (inc (str/index-of line "*/"))]
     (when (and index (< index (count line)))
       (subs line (+ index 1)))))
 
 (defn start-multiline-comment?
+  "Given a line of code, returns true if the line contains the beginning of a
+   multiline comment (i.e., '/*'), and false otherwise."
   [line]
   (str/includes? line "/*"))
 
 (defn end-multiline-comment?
+  "Given a line of code, returns true if the line contains the end of a
+  multiline comment (i.e., '*/'), and false otherwise."
   [line]
   (str/includes? line "*/"))
 
-(defn is-rest-endpoint? [word]
+(defn is-rest-endpoint?
+  "Given a word, returns true if the word is one of the REST endpoint keywords
+   (defined in the 'rest-endpoints' collection), and false otherwise."
+  [word]
   (not (nil? (some #(str/includes? word %) rest-endpoints))))
 
-(defn is-rest-controller? [word]
+(defn is-rest-controller?
+  "Given a word, returns true if the word contains the '@RestController'
+   annotation, and false otherwise."
+  [word]
   (str/includes? word "@RestController"))
 
-(defn is-not-inline-comment? [line]
+(defn is-not-inline-comment?
+  "Given a line of code, returns true if the line does not start with '//',
+   indicating that the line is not an inline comment, and false otherwise."
+  [line]
   (not (str/starts-with? line "//")))
 
-(defn controller-matching [controllerFlag, restEndpointFlag, filePath, line]
+(defn controller-matching
+  "Checks if a line of code matches the criteria for a REST controller method.
+
+  Given a line of code from a Java file, checks if the line matches the following criteria:
+  - Contains an annotation '@RestController' or was identified as a controller method in a previous line
+  - Contains a REST endpoint pattern specified in the 'rest-endpoints' collection
+  - Is not a private method
+
+  If the line matches all the criteria, prints the file path of the Java file to the console.
+
+  Args:
+  - controllerFlag: An atom that stores the state of whether the previous line contained a '@RestController' annotation
+  - restEndpointFlag: An atom that stores the state of whether the previous line contained a REST endpoint pattern
+  - filePath: The path of the Java file being checked
+  - line: A line of code from the Java file
+
+  Returns: None"
+  [controllerFlag, restEndpointFlag, filePath, line]
   (if (not (nil? line))
     (doseq [word (str/split line #" ")]
       (if (or (is-rest-controller? word) (true? @controllerFlag))
@@ -53,14 +98,23 @@
           (if (or (is-rest-endpoint? word) (true? @restEndpointFlag))
             (do
               (reset! restEndpointFlag true)
-              (if (is-method-private? line)
+              (if (is-method-private? word)
                 (do
                   (reset! restEndpointFlag false)
                   (println filePath))
-                (if (is-another-method-access-modifier? line)
+                (if (is-another-method-access-modifier? word)
                   (reset! restEndpointFlag false))))))))))
 
 (defn contains-pattern
+  "Checks if a Java file contains REST controller methods.
+
+  Given a file path of a Java file, reads the file line by line and checks if each line contains a REST controller method.
+  If a REST controller method is found in the file, prints the file path to the console.
+
+  Args:
+  - file: The file path of a Java file
+
+  Returns: None"
   [file]
   (let [multilineCommentFlag (atom false), controllerFlag (atom false), restEndpointFlag (atom false)]
     (doseq [line (str/split-lines (slurp file))]
@@ -75,10 +129,20 @@
             (do (reset! multilineCommentFlag false)
                 (controller-matching controllerFlag restEndpointFlag (.getPath file) (code-after-multiline-comment line)))))))))
 
-(defn is-java-file? [file-name]
+(defn is-java-file?
+  "Given a file name, returns true if the file name ends with '.java',
+   indicating that the file is a Java source code file, and false otherwise."
+  [file-name]
   (str/ends-with? file-name ".java"))
 
-(defn directory-traversal [dir]
+(defn directory-traversal
+  "Given a directory path, recursively traverses the directory and its
+   subdirectories, and applies the 'contains-pattern' function to each
+   Java source code file found in the directory tree. Files that do not
+   end with '.java' are ignored.
+   The 'contains-pattern' function is responsible for detecting whether
+   the file contains the desired pattern."
+  [dir]
   (doseq [file (.listFiles (io/file dir))]
     (if (.isDirectory file)
       (directory-traversal file)
