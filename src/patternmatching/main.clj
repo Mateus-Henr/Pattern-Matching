@@ -1,6 +1,5 @@
-(ns main
-  (:require [clojure.java.io :as io])
-  (:require [clojure.string :as str]))
+(require '[clojure.java.io :as io])
+(require '[clojure.string :as str])
 
 ; Access modifiers that will not be included in the pattern matching.
 (def other-method-access-modifiers ["public", "protected"])
@@ -82,18 +81,18 @@
 (defn controller-matching
   "Checks if a line of code matches the criteria for a REST controller method.
 
-  Given a line of code from a Java file, checks if the line matches the following criteria:
+  Given a line of code from a file, checks if the line matches the following criteria:
   - Contains an annotation '@RestController' or was identified as a controller method in a previous line
   - Contains a REST endpoint pattern specified in the 'rest-endpoints' collection
   - Is not a private method
 
-  If the line matches all the criteria, prints the file path of the Java file to the console.
+  If the line matches all the criteria, prints the file path of the file to the console.
 
   Args:
   - controllerFlag: An atom that stores the state of whether the previous line contained a '@RestController' annotation
   - restEndpointFlag: An atom that stores the state of whether the previous line contained a REST endpoint pattern
-  - filePath: The path of the Java file being checked
-  - line: A line of code from the Java file
+  - filePath: The path of the file being checked
+  - line: A line of code from the file
 
   Returns: None"
   [controllerFlag, restEndpointFlag, filePath, line]
@@ -151,24 +150,23 @@
         (multiline-comment-handler multilineCommentFlag, controllerFlag, restEndpointFlag, file, (code-before-inline-comment line))
         (multiline-comment-handler multilineCommentFlag, controllerFlag, restEndpointFlag, file, line)))))
 
-(defn is-java-file?
-  "Given a file name, returns true if the file name ends with '.java',
-   indicating that the file is a Java source code file, and false otherwise."
-  [fileName]
-  (str/ends-with? fileName ".java"))
+(defn is-provided-file-extension?
+  "Returns true if the given fileName ends with the given fileExtension."
+  [fileName fileExtension]
+  (str/ends-with? fileName fileExtension))
 
-(defn directory-traversal
+(defn word-search
   "Given a directory path, recursively traverses the directory and its
    subdirectories, and applies the 'contains-pattern' function to each
-   Java source code file found in the directory tree. Files that do not
-   end with '.java' are ignored.
+   file with given extension found in the directory tree. Files that do not
+   end with the given extension are ignored.
    The 'contains-pattern' function is responsible for detecting whether
    the file contains the desired pattern.
 
    Returns: None"
-  [dir]
+  [dir fileExtension]
   (doseq [file (.listFiles (io/file dir))]
     (if (.isDirectory file)
-      (directory-traversal file)
-      (if (is-java-file? (.getName file))
+      (word-search file fileExtension)
+      (if (is-provided-file-extension? (.getName file) fileExtension)
         (contains-pattern file)))))
