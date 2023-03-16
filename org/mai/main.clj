@@ -66,11 +66,18 @@
   [word]
   (str/includes? word "@RestController"))
 
-(defn is-not-inline-comment?
-  "Given a line of code, returns true if the line does not start with '//',
-   indicating that the line is not an inline comment, and false otherwise."
+(defn code-before-inline-comment
+  "Given a line of code, returns the substring of line before the first
+  occurrence of '//' if it exists, otherwise returns nil."
   [line]
-  (not (str/starts-with? line "//")))
+  (let [index (str/index-of line "//" 1)]
+    (when index
+      (subs line 0 index))))
+
+(defn has-inline-comment?
+  "Given a line of code,returns true if line contains '//', otherwise returns false."
+  [line]
+  (str/includes? line "//"))
 
 (defn controller-matching
   "Checks if a line of code matches the criteria for a REST controller method.
@@ -105,35 +112,50 @@
                 (if (is-another-method-access-modifier? word)
                   (reset! restEndpointFlag false))))))))))
 
+(defn multiline-comment-handler
+  "Handles a line of code that is within or not a multiline comment.
+
+  Checks if the line starts or ends a multiline comment, and updates the corresponding flags accordingly.
+
+  Arguments:
+  - multilineCommentFlag: A boolean atom indicating whether the current line is within a multiline comment.
+  - controllerFlag: A boolean atom indicating whether the current file contains a '@RestController' annotation.
+  - restEndpointFlag: A boolean atom indicating whether the current line contains a REST endpoint method.
+  - file: The current file being checked.
+  - line: The current line of code being checked.
+
+   Returns: None"
+  [multilineCommentFlag, controllerFlag, restEndpointFlag, file, line]
+  (if (not (nil? line))
+    (do
+      (if (start-multiline-comment? line)
+        (do (reset! multilineCommentFlag true)
+            (controller-matching controllerFlag restEndpointFlag (.getPath file) (code-before-multiline-comment line))))
+      (if (false? @multilineCommentFlag)
+        (controller-matching controllerFlag restEndpointFlag (.getPath file) line))
+      (if (end-multiline-comment? line)
+        (do (reset! multilineCommentFlag false)
+            (controller-matching controllerFlag restEndpointFlag (.getPath file) (code-after-multiline-comment line)))))))
+
 (defn contains-pattern
-  "Checks if a Java file contains REST controller methods.
+  "Checks if a given file contains a REST endpoint method, and prints the file path if one is found.
 
-  Given a file path of a Java file, reads the file line by line and checks if each line contains a REST controller method.
-  If a REST controller method is found in the file, prints the file path to the console.
+  Arguments:
+  - file: The current file being checked.
 
-  Args:
-  - file: The file path of a Java file
-
-  Returns: None"
+   Returns: None"
   [file]
   (let [multilineCommentFlag (atom false), controllerFlag (atom false), restEndpointFlag (atom false)]
     (doseq [line (str/split-lines (slurp file))]
-      (if (is-not-inline-comment? line)
-        (do
-          (if (start-multiline-comment? line)
-            (do (reset! multilineCommentFlag true)
-                (controller-matching controllerFlag restEndpointFlag (.getPath file) (code-before-multiline-comment line))))
-          (if (false? @multilineCommentFlag)
-            (controller-matching controllerFlag restEndpointFlag (.getPath file) line))
-          (if (end-multiline-comment? line)
-            (do (reset! multilineCommentFlag false)
-                (controller-matching controllerFlag restEndpointFlag (.getPath file) (code-after-multiline-comment line)))))))))
+      (if (has-inline-comment? line)
+        (multiline-comment-handler multilineCommentFlag, controllerFlag, restEndpointFlag, file, (code-before-inline-comment line))
+        (multiline-comment-handler multilineCommentFlag, controllerFlag, restEndpointFlag, file, line)))))
 
 (defn is-java-file?
   "Given a file name, returns true if the file name ends with '.java',
    indicating that the file is a Java source code file, and false otherwise."
-  [file-name]
-  (str/ends-with? file-name ".java"))
+  [fileName]
+  (str/ends-with? fileName ".java"))
 
 (defn directory-traversal
   "Given a directory path, recursively traverses the directory and its
@@ -141,7 +163,9 @@
    Java source code file found in the directory tree. Files that do not
    end with '.java' are ignored.
    The 'contains-pattern' function is responsible for detecting whether
-   the file contains the desired pattern."
+   the file contains the desired pattern.
+
+   Returns: None"
   [dir]
   (doseq [file (.listFiles (io/file dir))]
     (if (.isDirectory file)
