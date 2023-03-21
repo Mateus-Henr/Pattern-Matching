@@ -16,7 +16,7 @@
   "Returns true if the given word contains another method access
    modifier other than private (such as public or protected), false otherwise."
   [word]
-  (not (nil? (some #(str/includes? word %) other-method-access-modifiers))))
+  (some #(str/includes? word %) other-method-access-modifiers))
 
 (defn is-method-private?
   "Returns true if the given word contains the 'private' access modifier
@@ -57,7 +57,7 @@
   "Given a word, returns true if the word is one of the REST endpoint keywords
    (defined in the 'rest-endpoints' collection), and false otherwise."
   [word]
-  (not (nil? (some #(str/includes? word %) rest-endpoints))))
+  (some #(str/includes? word %) rest-endpoints))
 
 (defn is-rest-controller?
   "Given a word, returns true if the word contains the '@RestController'
@@ -96,7 +96,7 @@
 
   Returns: None"
   [controllerFlag, restEndpointFlag, filePath, line]
-  (if (not (nil? line))
+  (if (some identity line)
     (doseq [word (str/split line #" ")]
       (if (or (is-rest-controller? word) (true? @controllerFlag))
         (do
@@ -125,7 +125,7 @@
 
    Returns: None"
   [multilineCommentFlag, controllerFlag, restEndpointFlag, file, line]
-  (if (not (nil? line))
+  (if (identity line)
     (do
       (if (start-multiline-comment? line)
         (do (reset! multilineCommentFlag true)
